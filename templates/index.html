@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projeto PILT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">Projeto PILT</p>
+      <h1>Análise de enduramento com pipeline integrado</h1>
+      <p class="subtitle">
+        Selecione uma imagem, visualize o arquivo original e acompanhe, na mesma interface,
+        as métricas e os resultados gerados pelo pipeline.
+      </p>
+    </div>
+  </header>
+
+  <main class="container main-grid">
+    <section class="card upload-card">
+      <h2>Envio da imagem</h2>
+      <p class="section-text">
+        Escolha uma imagem do seu computador. A pré-visualização será exibida antes do processamento.
+      </p>
+
+      <div class="upload-actions">
+        <input type="file" id="fileInput" accept="image/*">
+        <button id="processBtn" class="btn-primary" disabled>Processar imagem</button>
+      </div>
+
+      <p id="fileName" class="file-name">Nenhum arquivo selecionado.</p>
+      <p id="status" class="status">Aguardando seleção de imagem.</p>
+
+      <div class="image-frame large-frame" id="previewWrapper">
+        <span class="placeholder">A imagem selecionada aparecerá aqui.</span>
+      </div>
+    </section>
+
+    <section class="card metrics-card">
+      <h2>Medidas do enduramento</h2>
+
+      <div class="metrics-grid">
+        <article class="metric-box">
+          <span class="metric-label">Área em pixels</span>
+          <strong id="areaPx" class="metric-value">-</strong>
+        </article>
+
+        <article class="metric-box">
+          <span class="metric-label">Área em mm²</span>
+          <strong id="areaMm2" class="metric-value">-</strong>
+        </article>
+
+        <article class="metric-box">
+          <span class="metric-label">Raio equivalente (mm)</span>
+          <strong id="radiusMm" class="metric-value">-</strong>
+        </article>
+      </div>
+
+      <h3 class="subheading">Resposta JSON</h3>
+      <pre id="jsonOutput" class="json-box">Nenhum processamento executado.</pre>
+    </section>
+
+    <section class="card results-card full-width">
+      <div class="section-header">
+        <div>
+          <h2>Resultados visuais</h2>
+          <p class="section-text">
+            As imagens geradas pela pipeline serão exibidas abaixo.
+          </p>
+        </div>
+      </div>
+
+      <div id="resultsGrid" class="results-grid">
+        <div class="empty-results">
+          Nenhum resultado disponível ainda.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const processBtn = document.getElementById("processBtn");
+    const fileName = document.getElementById("fileName");
+    const statusEl = document.getElementById("status");
+    const previewWrapper = document.getElementById("previewWrapper");
+
+    const areaPxEl = document.getElementById("areaPx");
+    const areaMm2El = document.getElementById("areaMm2");
+    const radiusMmEl = document.getElementById("radiusMm");
+    const jsonOutputEl = document.getElementById("jsonOutput");
+    const resultsGrid = document.getElementById("resultsGrid");
+
+    let selectedFile = null;
+
+    const preferredOrder = [
+      "final_overlay_full.png",
+      "final_mask_full.png",
+      "roi_final_mask_roi.png",
+      "2_yolo_ppd_bbox_debug.jpg",
+      "1_a4_bbox_debug.jpg",
+      "1b_a4_quad_debug.jpg",
+      "1c_a4_rectified.jpg",
+      "roi_0.jpg",
+      "roi_1_mask_skin.jpg",
+      "roi_hsv_hist_with_selected_interval.png",
+      "roi_hsv_2_mask_base.jpg",
+      "roi_hsv_3_edges.jpg",
+      "roi_hsv_4_candidates_debug.jpg",
+      "roi_hsv_4b_region_from_edges.jpg",
+      "roi_hsv_4c_region_inner.jpg",
+      "roi_hsv_4d_region_largest_component.jpg",
+      "roi_hsv_4e_mask_base_inner.jpg",
+      "roi_hsv_4f_mask_largest_component.jpg",
+      "roi_hsv_5_mask_final.jpg",
+      "roi_rel_2_gray_smooth.jpg",
+      "roi_rel_3_blackhat.jpg",
+      "roi_rel_4_laplacian.jpg",
+      "roi_rel_5_combined.jpg",
+      "roi_rel_6_binary_inverted_refined.jpg",
+      "roi_rel_7_mask_final.jpg",
+      "0_original.jpg"
+    ];
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      selectedFile = file || null;
+
+      if (!selectedFile) {
+        processBtn.disabled = true;
+        fileName.textContent = "Nenhum arquivo selecionado.";
+        statusEl.textContent = "Aguardando seleção de imagem.";
+        previewWrapper.innerHTML = '<span class="placeholder">A imagem selecionada aparecerá aqui.</span>';
+        return;
+      }
+
+      fileName.textContent = selectedFile.name;
+      processBtn.disabled = false;
+      statusEl.textContent = "Imagem pronta para processamento.";
+
+      const url = URL.createObjectURL(selectedFile);
+      previewWrapper.innerHTML = `<img src="${url}" alt="Imagem selecionada" class="preview-image">`;
+    });
+
+    processBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+
+      processBtn.disabled = true;
+      statusEl.textContent = "Enviando imagem e processando...";
+      resultsGrid.innerHTML = '<div class="empty-results">Processando imagem. Aguarde...</div>';
+      jsonOutputEl.textContent = "Processando...";
+      areaPxEl.textContent = "-";
+      areaMm2El.textContent = "-";
+      radiusMmEl.textContent = "-";
+
+      try {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+
+        const response = await fetch("/process-image", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+        jsonOutputEl.textContent = JSON.stringify(data, null, 2);
+
+        if (!response.ok || data.status === "error") {
+          statusEl.textContent = data.message || "Erro ao processar a imagem.";
+          resultsGrid.innerHTML = '<div class="empty-results">Nenhuma imagem de resultado disponível.</div>';
+          return;
+        }
+
+        if (data.status === "no_detection") {
+          statusEl.textContent = data.message || "Nenhuma ROI/lesão detectada.";
+          resultsGrid.innerHTML = '<div class="empty-results">A API respondeu sem detecção útil.</div>';
+          return;
+        }
+
+        areaPxEl.textContent = data.area_px ?? "-";
+        areaMm2El.textContent = data.area_mm2 ?? "-";
+        radiusMmEl.textContent = data.radius_mm ?? "-";
+        statusEl.textContent = "Processamento concluído com sucesso.";
+
+        const files = data.files || {};
+        const orderedNames = Object.keys(files).sort((a, b) => {
+          const ia = preferredOrder.indexOf(a);
+          const ib = preferredOrder.indexOf(b);
+
+          if (ia === -1 && ib === -1) return a.localeCompare(b);
+          if (ia === -1) return 1;
+          if (ib === -1) return -1;
+          return ia - ib;
+        });
+
+        if (!orderedNames.length) {
+          resultsGrid.innerHTML = '<div class="empty-results">A API não retornou arquivos de resultado.</div>';
+          return;
+        }
+
+        resultsGrid.innerHTML = orderedNames.map((name) => {
+          const src = files[name];
+          return `
+            <article class="result-card">
+              <h3>${name}</h3>
+              <div class="image-frame">
+                <img src="${src}" alt="${name}" class="result-image">
+              </div>
+            </article>
+          `;
+        }).join("");
+      } catch (error) {
+        statusEl.textContent = `Erro de comunicação com a API: ${error.message}`;
+        resultsGrid.innerHTML = '<div class="empty-results">Falha ao buscar os resultados.</div>';
+        jsonOutputEl.textContent = JSON.stringify({ error: error.message }, null, 2);
+      } finally {
+        processBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
