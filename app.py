@@ -115,6 +115,13 @@ def process_image_endpoint():
         file.save(upload_path)
 
         image = cv2.imread(upload_path)
+        max_width = 1280
+        h, w = image.shape[:2]
+
+        if w > max_width:
+            scale = max_width / w
+            new_h = int(h * scale)
+            image = cv2.resize(image, (max_width, new_h), interpolation=cv2.INTER_AREA)
         if image is None:
             return jsonify({
                 "status": "error",
