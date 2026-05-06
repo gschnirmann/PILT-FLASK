@@ -27,8 +27,21 @@ A4_W_MM = 210.0
 A4_H_MM = 297.0
 
 # ================= LOAD MODELS =================
-a4_model = YOLO(A4_MODEL_PATH)
-ppd_model = YOLO(PPD_MODEL_PATH)
+#a4_model = YOLO(A4_MODEL_PATH)
+#ppd_model = YOLO(PPD_MODEL_PATH)
+a4_model = None
+ppd_model = None
+
+def load_models():
+    global a4_model, ppd_model
+
+    if a4_model is None:
+        print("Carregando modelo A4...")
+        a4_model = YOLO(A4_MODEL_PATH)
+
+    if ppd_model is None:
+        print("Carregando modelo PPD...")
+        ppd_model = YOLO(PPD_MODEL_PATH)
 
 # ================= HELPERS (IGUAIS) =================
 
@@ -125,6 +138,7 @@ def segment_roi(roi, out_dir):
 # ================= MAIN PIPELINE =================
 
 def process_image(image, output_dir):
+    load_models()
     ensure_dir(output_dir)
 
     H, W = image.shape[:2]
